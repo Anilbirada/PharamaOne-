@@ -9,6 +9,7 @@ const { seedDemoData, verifyDatabaseIntegrity, cleanupDemoData, SEED_TAG } = req
 const root = path.resolve(__dirname, '..');
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pharmaone-seeder-e2e-'));
 const testDbFile = path.join(tempDir, 'db.json');
+const seederTestDbFile = path.join(tempDir, 'seeder-db.json');
 
 // Initialize with a baseline db containing 1 pre-existing medicine
 const baseline = {
@@ -39,6 +40,8 @@ const baseline = {
 };
 
 fs.writeFileSync(testDbFile, JSON.stringify(baseline, null, 2), 'utf8');
+fs.writeFileSync(seederTestDbFile, JSON.stringify(baseline, null, 2), 'utf8');
+seedDemoData(testDbFile, 60);
 
 // Start isolated test API server
 let server;
@@ -92,7 +95,7 @@ async function api(path, options = {}) {
 }
 
 test('deterministic seeder populates 60 days of synthetic pharmacy transactions safely', () => {
-  const seedResult = seedDemoData(testDbFile, 60);
+  const seedResult = seedDemoData(seederTestDbFile, 60);
   assert.equal(seedResult.status, 'SEEDED_SUCCESSFULLY');
   assert.equal(seedResult.metrics.medicinesSeeded, 112);
   assert.ok(seedResult.metrics.suppliersSeeded >= 2);
@@ -101,17 +104,17 @@ test('deterministic seeder populates 60 days of synthetic pharmacy transactions 
   assert.equal(seedResult.metrics.daysCount, 60);
 
   // Check pre-existing record is preserved
-  const db = JSON.parse(fs.readFileSync(testDbFile, 'utf8'));
+  const db = JSON.parse(fs.readFileSync(seederTestDbFile, 'utf8'));
   const preExisting = db.medicines.find(m => m.barcode === 'BASE-11111');
   assert.ok(preExisting, 'Pre-existing medicine must not be deleted or overwritten');
   assert.equal(preExisting.stock, 50);
 });
 
 test('seeder is strictly idempotent and does not create duplicate records on rerun', () => {
-  const secondSeed = seedDemoData(testDbFile, 60);
+  const secondSeed = seedDemoData(seederTestDbFile, 60);
   assert.equal(secondSeed.status, 'IDEMPOTENT_SKIPPED');
 
-  const verification = verifyDatabaseIntegrity(testDbFile, 60);
+  const verification = verifyDatabaseIntegrity(seederTestDbFile, 60);
   assert.equal(verification.verified, true);
   assert.equal(verification.errors.length, 0);
   assert.equal(verification.counts.seededMedicines, 112);
@@ -119,7 +122,7 @@ test('seeder is strictly idempotent and does not create duplicate records on rer
 });
 
 test('inventory reconciliation passes for all seeded products without negative stock', () => {
-  const verification = verifyDatabaseIntegrity(testDbFile, 60);
+  const verification = verifyDatabaseIntegrity(seederTestDbFile, 60);
   assert.equal(verification.verified, true);
   assert.equal(verification.counts.reconciledProducts, 112);
   assert.ok(verification.analytics.netRevenue > 0);
@@ -183,13 +186,13 @@ test('GET /api/notifications returns low stock and approaching expiry alerts', a
 });
 
 test('cleanup command removes only demo-tagged records and preserves baseline data', () => {
-  const cleanupResult = cleanupDemoData(testDbFile);
+  const cleanupResult = cleanupDemoData(seederTestDbFile);
   assert.equal(cleanupResult.status, 'CLEANED_SUCCESSFULLY');
   assert.equal(cleanupResult.removed.medicines, 112);
   assert.ok(cleanupResult.removed.sales >= 1000);
   assert.ok(cleanupResult.removed.returns >= 10);
 
-  const db = JSON.parse(fs.readFileSync(testDbFile, 'utf8'));
+  const db = JSON.parse(fs.readFileSync(seederTestDbFile, 'utf8'));
   assert.equal(db.medicines.length, 1);
   assert.equal(db.medicines[0].name, 'Pre-existing Paracetamol');
   assert.equal(db.sales.length, 0);
