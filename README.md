@@ -20,6 +20,23 @@ The development server binds to loopback and is not exposed to other devices on 
 
 To run tests, use `npm test` (or `node --test`). API tests use a temporary JSON database and do not modify `data/db.json`; migration and pharmacy-isolation tests execute the checked-in SQL against a disposable embedded PostgreSQL instance.
 
+## Synthetic 60-day demo data
+
+The running application uses its existing JSON collections (`medicines`, `sales`, `returns`, `purchases`, `customers`, `suppliers`, `expenses`, and `transactions`). PostgreSQL migrations are separate scaffolding; these commands do not write to PostgreSQL.
+
+From the project folder, run:
+
+```powershell
+npm run seed
+npm run seed:verify
+npm test
+npm run seed:cleanup
+```
+
+`seed` generates deterministic, tagged synthetic records, preserves pre-existing records, and skips a repeat run when the demo seed is already present. `seed:verify` checks sales and return reconciliation, acquisition costs, stock movement reconciliation, negative inventory, and analytics. `seed:cleanup` removes only records carrying the demo seed tag and restores the shop settings that existed before seeding. The default target is `data/db.json`; use `node scripts/seed.js <command> --target=<path>` to use a disposable database file instead. Back up any local data before seeding. The seeder intentionally does not create user accounts or demo passwords.
+
+The Render demo Blueprint sets `PHARMAONE_SEED_DEMO=true`, so a fresh ephemeral instance seeds itself at startup. Render's free filesystem is not persistent; the synthetic seed may be regenerated after restarts and must not be replaced with real pharmacy data.
+
 ## Render deployment (demo only)
 
 The checked-in `render.yaml` describes a free Node web service on `main`. Create or update the Render service from this Blueprint, then deploy the latest `main` commit. The server binds to `0.0.0.0` on Render's assigned `PORT`, initializes a missing JSON store at startup, and exposes `/api/health` as its health check. The health response includes Render's deployed commit SHA so you can confirm which version is running.

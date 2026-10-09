@@ -172,6 +172,64 @@ test('a fresh deployment initializes missing JSON storage before serving request
   }
 });
 
+test('Render demo seed flag populates a fresh deployment before it accepts traffic', async () => {
+  const isolatedDbFile = path.join(tempDir, 'render-demo', 'data', 'db.json');
+  const child = spawn(process.execPath, ['server.js'], {
+    cwd: root,
+    env: {
+      ...process.env,
+      PORT: '0',
+      HOST: '127.0.0.1',
+      PHARMAONE_DB_FILE: isolatedDbFile,
+      PHARMAONE_SEED_DEMO: 'true'
+    },
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  let childOutput = '';
+  child.stdout.setEncoding('utf8');
+  child.stderr.setEncoding('utf8');
+  child.stdout.on('data', chunk => { childOutput += chunk; });
+  child.stderr.on('data', chunk => { childOutput += chunk; });
+  try {
+    const childUrl = await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`Seeded server did not start: ${childOutput}`)), 10000);
+      child.stdout.on('data', chunk => {
+        const match = `${chunk}`.match(/http:\/\/127\.0\.0\.1:(\d+)/);
+        if (match) {
+          clearTimeout(timer);
+          resolve(`http://127.0.0.1:${match[1]}`);
+        }
+      });
+      child.once('error', error => {
+        clearTimeout(timer);
+        reject(error);
+      });
+      child.once('exit', code => {
+        clearTimeout(timer);
+        reject(new Error(`Seeded server exited before listening (${code}): ${childOutput}`));
+      });
+    });
+    const [healthResponse, medicinesResponse, analyticsResponse] = await Promise.all([
+      fetch(`${childUrl}/api/health`),
+      fetch(`${childUrl}/api/medicines`),
+      fetch(`${childUrl}/api/analytics/sales?period=30d`)
+    ]);
+    assert.equal(healthResponse.status, 200);
+    assert.equal(medicinesResponse.status, 200);
+    assert.equal((await medicinesResponse.json()).length, 112);
+    assert.equal(analyticsResponse.status, 200);
+    const analytics = await analyticsResponse.json();
+    assert.ok(analytics.metrics.revenue > 0);
+    assert.ok(analytics.metrics.transactions > 0);
+  } finally {
+    if (child.exitCode === null) {
+      const stopped = new Promise(resolve => child.once('exit', resolve));
+      child.kill();
+      await stopped;
+    }
+  }
+});
+
 test('malformed JSON is rejected as a client error', async () => {
   await ready;
   const invalid = await request('/api/medicines', {

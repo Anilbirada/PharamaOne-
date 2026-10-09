@@ -5,9 +5,12 @@
   "description": "Expanded local development build for PharmaOne pharmacy management workflows",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check analytics.js && node --check public/app.js && node --check public/analytics-dashboard.js && node --check scripts/migrate.js",
+    "check": "node --check server.js && node --check analytics.js && node --check public/app.js && node --check public/analytics-dashboard.js && node --check public/sales-history.js && node --check scripts/migrate.js && node --check scripts/seed.js",
     "test": "node --test",
-    "db:migrate": "node scripts/migrate.js"
+    "db:migrate": "node scripts/migrate.js",
+    "seed": "node scripts/seed.js seed",
+    "seed:verify": "node scripts/seed.js verify",
+    "seed:cleanup": "node scripts/seed.js cleanup"
   },
   "engines": {
     "node": ">=18"
