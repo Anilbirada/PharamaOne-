@@ -4,6 +4,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { assertTimeZone, buildSalesAnalytics, buildSalesReport, DEFAULT_TIME_ZONE, resolveRange } = require('./analytics');
 const PORT = Number(process.env.PORT || 3000);
+const HOST = process.env.HOST || (process.env.RENDER ? '0.0.0.0' : '127.0.0.1');
 const ROOT = __dirname;
 const DB_FILE = path.resolve(process.env.PHARMAONE_DB_FILE || path.join(ROOT, 'data', 'db.json'));
 const PUBLIC = path.join(ROOT, 'public');
@@ -58,7 +59,7 @@ function recordId(pathname,prefix){const m=pathname.match(new RegExp('^/api/'+pr
 function listEndpoint(db,req,res,name){if(req.method==='GET')return send(res,200,db[name]);}
 const server=http.createServer(async(req,res)=>{const url=new URL(req.url,'http://localhost');try{
  if(url.pathname.startsWith('/api/')){
-  if(req.method==='GET'&&url.pathname==='/api/health'){readDB();return send(res,200,{ok:true,service:'PharmaOne local API',mode:'development',storage:'json-file'});}
+  if(req.method==='GET'&&url.pathname==='/api/health'){readDB();return send(res,200,{ok:true,service:'PharmaOne API',mode:process.env.NODE_ENV||'development',storage:'json-file',commit:process.env.RENDER_GIT_COMMIT||null});}
   const db=readDB(), p=url.pathname;
   if(req.method==='GET'&&p==='/api/summary'){const todays=db.sales.filter(s=>s.date.slice(0,10)===today());const low=db.medicines.filter(m=>m.stock<=m.minStock).length;const soon=new Date(Date.now()+90*86400000).toISOString().slice(0,10);const expiring=db.medicines.filter(m=>m.expiry&&m.expiry>=today()&&m.expiry<=soon).length;return send(res,200,{todaySales:round(todays.reduce((a,s)=>a+s.total,0)),invoiceCount:todays.length,medicineCount:db.medicines.length,lowStock:low,expiring,stockUnits:db.medicines.reduce((a,m)=>a+m.stock,0),customerCount:db.customers.length,supplierCount:db.suppliers.length,purchaseSpend:round(db.purchases.filter(x=>x.date.slice(0,10)===today()).reduce((a,x)=>a+x.total,0)),outstanding:round(db.sales.filter(s=>s.paymentMode==='CREDIT').reduce((a,s)=>a+(s.balance??s.total),0))});}
   if(req.method==='GET'&&p==='/api/analytics/sales'){const timeZone=assertTimeZone(url.searchParams.get('timeZone')||db.settings.timeZone||DEFAULT_TIME_ZONE),range=resolveRange({period:url.searchParams.get('period')||'today',from:url.searchParams.get('from'),to:url.searchParams.get('to')},timeZone),result=buildSalesAnalytics(db,{...range,timeZone,sort:url.searchParams.get('sort')||'units'});return send(res,200,result);}
@@ -95,4 +96,5 @@ const server=http.createServer(async(req,res)=>{const url=new URL(req.url,'http:
  }
  let file=url.pathname==='/'?'index.html':decodeURIComponent(url.pathname.slice(1));const full=path.resolve(PUBLIC,file);if(!full.startsWith(PUBLIC+path.sep))return send(res,403,'Forbidden','text/plain; charset=utf-8');fs.readFile(full,(err,data)=>{if(err)return send(res,404,'Not found','text/plain; charset=utf-8');send(res,200,data,MIME[path.extname(full)]||'application/octet-stream');});
  }catch(e){const status=Number.isInteger(e.status)&&e.status>=400&&e.status<500?e.status:500;if(status===500)console.error('PharmaOne request failed:',e);if(!res.headersSent)send(res,status,{error:status===500?'Internal server error':e.message});}});
-server.listen(PORT,'127.0.0.1',()=>console.log(`PharmaOne local API running at http://127.0.0.1:${server.address().port}`));
+readDB();
+server.listen(PORT,HOST,()=>console.log(`PharmaOne API listening on ${HOST}:${server.address().port} (local: http://127.0.0.1:${server.address().port})`));

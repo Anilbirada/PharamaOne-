@@ -121,6 +121,57 @@ test('dashboard and reports default to the India business timezone', async () =>
   assert.equal(report.payload.to, indiaToday);
 });
 
+test('a fresh deployment initializes missing JSON storage before serving requests', async () => {
+  const isolatedDir = path.join(tempDir, 'fresh-deployment');
+  const isolatedDbFile = path.join(isolatedDir, 'data', 'db.json');
+  const child = spawn(process.execPath, ['server.js'], {
+    cwd: root,
+    env: { ...process.env, PORT: '0', HOST: '127.0.0.1', PHARMAONE_DB_FILE: isolatedDbFile },
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  let childOutput = '';
+  child.stdout.setEncoding('utf8');
+  child.stderr.setEncoding('utf8');
+  child.stdout.on('data', chunk => { childOutput += chunk; });
+  child.stderr.on('data', chunk => { childOutput += chunk; });
+  try {
+    const childUrl = await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`Fresh server did not start: ${childOutput}`)), 5000);
+      child.stdout.on('data', chunk => {
+        const match = `${chunk}`.match(/127\.0\.0\.1:(\d+)/);
+        if (match) {
+          clearTimeout(timer);
+          resolve(`http://127.0.0.1:${match[1]}`);
+        }
+      });
+      child.once('error', error => {
+        clearTimeout(timer);
+        reject(error);
+      });
+      child.once('exit', code => {
+        clearTimeout(timer);
+        reject(new Error(`Fresh server exited before listening (${code}): ${childOutput}`));
+      });
+    });
+    assert.equal(fs.existsSync(isolatedDbFile), true);
+    const healthResponse = await fetch(`${childUrl}/api/health`);
+    assert.equal(healthResponse.status, 200);
+    const health = await healthResponse.json();
+    assert.equal(health.ok, true);
+    const analyticsResponse = await fetch(`${childUrl}/api/analytics/sales?period=today`);
+    assert.equal(analyticsResponse.status, 200);
+    const analytics = await analyticsResponse.json();
+    assert.equal(analytics.metrics.transactions, 0);
+    assert.equal(analytics.metrics.revenue, 0);
+  } finally {
+    if (child.exitCode === null) {
+      const stopped = new Promise(resolve => child.once('exit', resolve));
+      child.kill();
+      await stopped;
+    }
+  }
+});
+
 test('malformed JSON is rejected as a client error', async () => {
   await ready;
   const invalid = await request('/api/medicines', {

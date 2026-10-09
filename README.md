@@ -20,6 +20,12 @@ The development server binds to loopback and is not exposed to other devices on 
 
 To run tests, use `npm test` (or `node --test`). API tests use a temporary JSON database and do not modify `data/db.json`; migration and pharmacy-isolation tests execute the checked-in SQL against a disposable embedded PostgreSQL instance.
 
+## Render deployment (demo only)
+
+The checked-in `render.yaml` describes a free Node web service on `main`. Create or update the Render service from this Blueprint, then deploy the latest `main` commit. The server binds to `0.0.0.0` on Render's assigned `PORT`, initializes a missing JSON store at startup, and exposes `/api/health` as its health check. The health response includes Render's deployed commit SHA so you can confirm which version is running.
+
+The JSON store on Render's free filesystem is ephemeral: its contents can be lost on restart or redeploy. Do not use this setup for real pharmacy/customer data. Persistent multi-user operation requires a production database integration, authentication and authorization, which this application does not yet have.
+
 ## PostgreSQL development schema (isolated test database only)
 
 PostgreSQL services and command-line tools may already be installed on the Windows machine. Copy `.env.example` to `.env` (an ignored placeholder `.env` is provided in this workspace), then configure credentials locally:
