@@ -13,5 +13,3 @@ services:
         value: production
       - key: HOST
         value: 0.0.0.0
-      - key: PHARMAONE_SEED_DEMO
-        value: "true"

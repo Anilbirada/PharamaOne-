@@ -172,17 +172,19 @@ test('a fresh deployment initializes missing JSON storage before serving request
   }
 });
 
-test('Render demo seed flag populates a fresh deployment before it accepts traffic', async () => {
+test('Render automatically seeds an empty deployment without a manual environment variable', async () => {
   const isolatedDbFile = path.join(tempDir, 'render-demo', 'data', 'db.json');
+  const childEnv = {
+    ...process.env,
+    PORT: '0',
+    HOST: '127.0.0.1',
+    RENDER: 'true',
+    PHARMAONE_DB_FILE: isolatedDbFile
+  };
+  delete childEnv.PHARMAONE_SEED_DEMO;
   const child = spawn(process.execPath, ['server.js'], {
     cwd: root,
-    env: {
-      ...process.env,
-      PORT: '0',
-      HOST: '127.0.0.1',
-      PHARMAONE_DB_FILE: isolatedDbFile,
-      PHARMAONE_SEED_DEMO: 'true'
-    },
+    env: childEnv,
     stdio: ['ignore', 'pipe', 'pipe']
   });
   let childOutput = '';
@@ -217,10 +219,68 @@ test('Render demo seed flag populates a fresh deployment before it accepts traff
     assert.equal(healthResponse.status, 200);
     assert.equal(medicinesResponse.status, 200);
     assert.equal((await medicinesResponse.json()).length, 112);
+    const salesResponse = await fetch(`${childUrl}/api/sales`);
+    assert.equal(salesResponse.status, 200);
+    assert.equal((await salesResponse.json()).length, 1389);
     assert.equal(analyticsResponse.status, 200);
     const analytics = await analyticsResponse.json();
     assert.ok(analytics.metrics.revenue > 0);
     assert.ok(analytics.metrics.transactions > 0);
+  } finally {
+    if (child.exitCode === null) {
+      const stopped = new Promise(resolve => child.once('exit', resolve));
+      child.kill();
+      await stopped;
+    }
+  }
+});
+
+test('Render does not seed over an existing store', async () => {
+  const isolatedDbFile = path.join(tempDir, 'render-existing', 'data', 'db.json');
+  fs.mkdirSync(path.dirname(isolatedDbFile), { recursive: true });
+  fs.writeFileSync(isolatedDbFile, JSON.stringify(fixture), 'utf8');
+  const child = spawn(process.execPath, ['server.js'], {
+    cwd: root,
+    env: {
+      ...process.env,
+      PORT: '0',
+      HOST: '127.0.0.1',
+      RENDER: 'true',
+      PHARMAONE_DB_FILE: isolatedDbFile
+    },
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  let childOutput = '';
+  child.stdout.setEncoding('utf8');
+  child.stderr.setEncoding('utf8');
+  child.stdout.on('data', chunk => { childOutput += chunk; });
+  child.stderr.on('data', chunk => { childOutput += chunk; });
+  try {
+    const childUrl = await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`Existing-store server did not start: ${childOutput}`)), 5000);
+      child.stdout.on('data', chunk => {
+        const match = `${chunk}`.match(/http:\/\/127\.0\.0\.1:(\d+)/);
+        if (match) {
+          clearTimeout(timer);
+          resolve(`http://127.0.0.1:${match[1]}`);
+        }
+      });
+      child.once('error', error => {
+        clearTimeout(timer);
+        reject(error);
+      });
+      child.once('exit', code => {
+        clearTimeout(timer);
+        reject(new Error(`Existing-store server exited before listening (${code}): ${childOutput}`));
+      });
+    });
+    const [medicinesResponse, salesResponse] = await Promise.all([
+      fetch(`${childUrl}/api/medicines`),
+      fetch(`${childUrl}/api/sales`)
+    ]);
+    assert.equal((await medicinesResponse.json()).length, 1);
+    assert.equal((await salesResponse.json()).length, 0);
+    assert.equal(childOutput.includes('Demo seed startup:'), false);
   } finally {
     if (child.exitCode === null) {
       const stopped = new Promise(resolve => child.once('exit', resolve));

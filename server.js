@@ -48,6 +48,10 @@ function readDB(){
  for(const [counter,collection] of Object.entries(counters)) if(!Number.isInteger(d[counter])||d[counter]<1) d[counter]=d[collection].reduce((max,record)=>Math.max(max,Number(record.id)||0),0)+1;
  return d;
 }
+function isFreshEmptyStore(db){
+ const collections=['medicines','sales','transactions','customers','suppliers','purchases','returns','expenses','users','payments'];
+ return collections.every(name=>db[name].length===0)&&Object.keys(db.settings).length===0;
+}
 function writeDB(db){const tmp=DB_FILE+'.tmp';fs.mkdirSync(path.dirname(DB_FILE),{recursive:true});fs.writeFileSync(tmp,JSON.stringify(db,null,2));fs.renameSync(tmp,DB_FILE);}
 function send(res,status,data,type='application/json; charset=utf-8'){res.writeHead(status,{'Content-Type':type,'X-Content-Type-Options':'nosniff','Cache-Control':'no-store'});res.end(type.startsWith('application/json')?JSON.stringify(data):data);}
 function body(req){return new Promise((resolve,reject)=>{let s='',tooLarge=false;req.on('data',c=>{if(tooLarge)return;s+=c;if(s.length>1e6){tooLarge=true;const e=new Error('Request body exceeds 1 MB.');e.status=413;reject(e);}});req.on('end',()=>{if(tooLarge)return;try{const value=s?JSON.parse(s):{};if(!value||typeof value!=='object'||Array.isArray(value)){const e=new Error('JSON request body must be an object.');e.status=400;reject(e);return;}resolve(value);}catch{const e=new Error('Invalid JSON request body.');e.status=400;reject(e);}});req.on('error',reject);});}
@@ -96,8 +100,9 @@ const server=http.createServer(async(req,res)=>{const url=new URL(req.url,'http:
  }
  let file=url.pathname==='/'?'index.html':decodeURIComponent(url.pathname.slice(1));const full=path.resolve(PUBLIC,file);if(!full.startsWith(PUBLIC+path.sep))return send(res,403,'Forbidden','text/plain; charset=utf-8');fs.readFile(full,(err,data)=>{if(err)return send(res,404,'Not found','text/plain; charset=utf-8');send(res,200,data,MIME[path.extname(full)]||'application/octet-stream');});
  }catch(e){const status=Number.isInteger(e.status)&&e.status>=400&&e.status<500?e.status:500;if(status===500)console.error('PharmaOne request failed:',e);if(!res.headersSent)send(res,status,{error:status===500?'Internal server error':e.message});}});
-readDB();
-if (process.env.PHARMAONE_SEED_DEMO === 'true') {
+const startupDatabase = readDB();
+if (isFreshEmptyStore(startupDatabase) &&
+    (process.env.PHARMAONE_SEED_DEMO === 'true' || process.env.RENDER === 'true')) {
  const { seedDemoData } = require('./scripts/seed');
  const result = seedDemoData(DB_FILE, 60);
  console.log(`Demo seed startup: ${result.status}`);

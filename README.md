@@ -35,11 +35,11 @@ npm run seed:cleanup
 
 `seed` generates deterministic, tagged synthetic records, preserves pre-existing records, and skips a repeat run when the demo seed is already present. `seed:verify` checks sales and return reconciliation, acquisition costs, stock movement reconciliation, negative inventory, and analytics. `seed:cleanup` removes only records carrying the demo seed tag and restores the shop settings that existed before seeding. The default target is `data/db.json`; use `node scripts/seed.js <command> --target=<path>` to use a disposable database file instead. Back up any local data before seeding. The seeder intentionally does not create user accounts or demo passwords.
 
-The Render demo Blueprint sets `PHARMAONE_SEED_DEMO=true`, so a fresh ephemeral instance seeds itself at startup. Render's free filesystem is not persistent; the synthetic seed may be regenerated after restarts and must not be replaced with real pharmacy data.
+On Render, a completely empty store automatically receives the synthetic demo dataset at startup; no environment variable is required. Stores with existing records or settings are left untouched. Render's free filesystem is not persistent, so the synthetic seed may be regenerated after restarts and must not be replaced with real pharmacy data.
 
 ## Render deployment (demo only)
 
-The checked-in `render.yaml` describes a free Node web service on `main`. Create or update the Render service from this Blueprint, then deploy the latest `main` commit. The server binds to `0.0.0.0` on Render's assigned `PORT`, initializes a missing JSON store at startup, and exposes `/api/health` as its health check. The health response includes Render's deployed commit SHA so you can confirm which version is running.
+The checked-in `render.yaml` describes a free Node web service on `main`. Create or update the Render service from this Blueprint, then deploy the latest `main` commit. The server binds to `0.0.0.0` on Render's assigned `PORT`, initializes a missing JSON store at startup, seeds the synthetic demo data only when the Render store is completely empty, and exposes `/api/health` as its health check. The health response includes Render's deployed commit SHA so you can confirm which version is running.
 
 The JSON store on Render's free filesystem is ephemeral: its contents can be lost on restart or redeploy. Do not use this setup for real pharmacy/customer data. Persistent multi-user operation requires a production database integration, authentication and authorization, which this application does not yet have.
 
