@@ -1,3 +1,5 @@
 node_modules/
 data/db.json
 .env
+.env.*
+!.env.example

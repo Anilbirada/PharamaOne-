@@ -3,6 +3,20 @@
   "version": "0.2.0",
   "private": true,
   "description": "Expanded local development build for PharmaOne pharmacy management workflows",
-  "scripts": { "start": "node server.js", "check": "node --check server.js && node --check public/app.js" },
-  "engines": { "node": ">=18" }
+  "scripts": {
+    "start": "node server.js",
+    "check": "node --check server.js && node --check analytics.js && node --check public/app.js && node --check public/analytics-dashboard.js && node --check scripts/migrate.js",
+    "test": "node --test",
+    "db:migrate": "node scripts/migrate.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "dotenv": "^18.0.6",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8"
+  }
 }
